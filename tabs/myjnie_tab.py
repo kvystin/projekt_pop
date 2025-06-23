@@ -1,6 +1,3 @@
-"""
-Zakładka „Myjnie” – CRUD + dodawanie markerów na mapie.
-"""
 import tkinter as tk
 from tkinter import ttk, messagebox
 
