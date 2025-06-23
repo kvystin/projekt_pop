@@ -1,3 +1,4 @@
+import tkinter as tk
 from tkinter import ttk
 
 from models.car_wash import CarWash
@@ -10,52 +11,60 @@ class OverviewTab(ttk.Frame):
         super().__init__(parent)
         self.map_widget = map_widget
 
+        # TreeView z kolumnami: typ i nazwa/imię
         self.tree = ttk.Treeview(self, columns=("type", "name"), show="tree headings")
         self.tree.heading("#0",   text="Obiekt")
         self.tree.heading("type", text="Typ")
         self.tree.heading("name", text="Nazwa / Imię")
         self.tree.pack(fill="both", expand=True)
+        # dwuklik → funkcja _jump centrowała mapę
         self.tree.bind("<Double-1>", self._jump)
 
         ttk.Button(self, text="Odśwież", command=self.refresh).pack(pady=4)
+
         self.refresh()
 
-    # ----------------------------------------------------------
+    # buduje drzewo od zera
     def refresh(self):
         self.tree.delete(*self.tree.get_children())
         for wash in CarWash.all():
+            # główny węzeł – myjnia
             wid = self.tree.insert("", "end",
                                    text=f"{wash.name} ({wash.city})",
                                    values=("Myjnia", wash.name))
 
+            # podwęzeł „Klienci”
             cid = self.tree.insert(wid, "end", text="Klienci")
-            for c in Customer.all():
-                if c.assigned_car_wash == wash.name:
+            for cust in Customer.all():
+                if cust.assigned_car_wash == wash.name:
                     self.tree.insert(cid, "end", text="",
-                                     values=("Klient", c.full_name()))
+                                     values=("Klient", cust.full_name()))
 
+            # podwęzeł „Pracownicy”
             eid = self.tree.insert(wid, "end", text="Pracownicy")
-            for e in Employee.all():
-                if e.assigned_car_wash == wash.name:
+            for emp in Employee.all():
+                if emp.assigned_car_wash == wash.name:
                     self.tree.insert(eid, "end", text="",
-                                     values=("Pracownik", e.full_name()))
+                                     values=("Pracownik", emp.full_name()))
 
-    # ----------------------------------------------------------
-    def _jump(self, _evt):
-        iid = self.tree.focus()
-        if not iid: return
-        typ, name = self.tree.item(iid, "values")
+    # reakcja na dwuklik w TreeView – centrowanie mapy
+    def _jump(self, _event):
+        item_id = self.tree.focus()
+        if not item_id:
+            return
+        obj_type, name = self.tree.item(item_id, "values")
 
-        if typ == "Myjnia":
-            w = next(w for w in CarWash.all() if w.name == name)
-            self._center(*w.coordinates, 10)
-        elif typ == "Klient":
-            c = next(c for c in Customer.all() if c.full_name() == name)
-            self._center(*c.coordinates, 12)
-        elif typ == "Pracownik":
-            e = next(e for e in Employee.all() if e.full_name() == name)
-            self._center(*e.coordinates, 12)
+        if obj_type == "Myjnia":
+            wash = next(w for w in CarWash.all() if w.name == name)
+            self._center_map(*wash.coordinates, zoom=10)
+        elif obj_type == "Klient":
+            cust = next(c for c in Customer.all() if c.full_name() == name)
+            self._center_map(*cust.coordinates, zoom=12)
+        elif obj_type == "Pracownik":
+            emp = next(e for e in Employee.all() if e.full_name() == name)
+            self._center_map(*emp.coordinates, zoom=12)
 
-    def _center(self, lat, lon, zoom):
+    # pomocnicza metoda do ustawiania widoku mapy
+    def _center_map(self, lat: float, lon: float, zoom: int):
         self.map_widget.set_position(lat, lon)
         self.map_widget.set_zoom(zoom)

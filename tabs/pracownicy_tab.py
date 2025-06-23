@@ -1,101 +1,112 @@
-"""
-Zakładka „Pracownicy” – CRUD.
-"""
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 from models.employee import Employee
 from models.car_wash import CarWash
 from services.map_service import MapService
-from services.geolocation import get_coordinates
 
 
 class EmployeeTab(ttk.Frame):
-    def __init__(self, parent, map_widget, overview_tab=None):
+    def __init__(self, parent, map_widget, overview_tab):
         super().__init__(parent)
 
         self.map_service = MapService(map_widget)
         self.overview_tab = overview_tab
-        self.selected: int | None = None
+        self.selected_index: int | None = None
 
-        form = ttk.Frame(self); form.pack(fill="x", padx=4, pady=4)
-        for col, txt in enumerate(("Imię", "Nazwisko", "Miasto", "Myjnia")):
-            ttk.Label(form, text=txt).grid(row=0, column=col*2, sticky="e")
+        form = ttk.Frame(self)
+        form.pack(fill="x", padx=4, pady=4)
 
-        self.e_first = ttk.Entry(form, width=14); self.e_first.grid(row=0, column=1)
-        self.e_last  = ttk.Entry(form, width=14); self.e_last.grid(row=0, column=3)
-        self.e_city  = ttk.Entry(form, width=14); self.e_city.grid(row=0, column=5)
-        self.cb_wash = ttk.Combobox(form, state="readonly", width=16); self.cb_wash.grid(row=0, column=7)
+        for col, text in enumerate(("Imię", "Nazwisko", "Miasto", "Myjnia")):
+            ttk.Label(form, text=text).grid(row=0, column=col * 2, sticky="e")
 
-        self.btn_save = ttk.Button(form, text="Dodaj", command=self._save)
-        self.btn_save.grid(row=0, column=8, padx=3)
+        self.entry_first = ttk.Entry(form, width=12); self.entry_first.grid(row=0, column=1)
+        self.entry_last  = ttk.Entry(form, width=12); self.entry_last.grid(row=0, column=3)
+        self.entry_city  = ttk.Entry(form, width=12); self.entry_city.grid(row=0, column=5)
+        self.combo_wash  = ttk.Combobox(form, state="readonly", width=14); self.combo_wash.grid(row=0, column=7)
 
-        self.lb = tk.Listbox(self, height=10)
-        self.lb.pack(fill="both", expand=True, padx=4)
-        self.lb.bind("<<ListboxSelect>>", self._pick)
+        self.btn_add_save = ttk.Button(form, text="Dodaj", command=self._save)
+        self.btn_add_save.grid(row=0, column=8, padx=2)
 
-        bar = ttk.Frame(self); bar.pack(fill="x", padx=4, pady=3)
+        # lista
+        self.listbox = tk.Listbox(self, height=10)
+        self.listbox.pack(fill="both", expand=True, padx=4)
+        self.listbox.bind("<<ListboxSelect>>", self._on_select)
+
+        bar = ttk.Frame(self)
+        bar.pack(fill="x", padx=4, pady=3)
         ttk.Button(bar, text="Usuń",    command=self._delete).pack(side="left")
         ttk.Button(bar, text="Wyczyść", command=self._clear).pack(side="right")
 
         self.refresh()
 
+    # odświeża combobox i listbox
     def refresh(self):
-        self.cb_wash["values"] = [w.name for w in CarWash.all()]
-        if self.cb_wash.get() not in self.cb_wash["values"]:
-            self.cb_wash.set("")
-        self.lb.delete(0, tk.END)
+        self.combo_wash["values"] = [w.name for w in CarWash.all()]
+        if self.combo_wash.get() not in self.combo_wash["values"]:
+            self.combo_wash.set("")
+        self.listbox.delete(0, tk.END)
         for emp in Employee.all():
-            self.lb.insert(tk.END, emp.full_name())
+            self.listbox.insert(tk.END, emp.full_name())
 
+    # dodanie lub zapis zmian
     def _save(self):
-        first = self.e_first.get().strip()
-        last  = self.e_last.get().strip()
-        city  = self.e_city.get().strip()
-        wash  = self.cb_wash.get().strip()
+        first = self.entry_first.get().strip()
+        last  = self.entry_last.get().strip()
+        city  = self.entry_city.get().strip()
+        wash  = self.combo_wash.get().strip()
 
         if not all([first, last, city, wash]):
             messagebox.showwarning("Błąd", "Wszystkie pola są wymagane")
             return
 
-        if self.selected is None:
+        if self.selected_index is None:
             emp = Employee(first, last, city, wash)
         else:
-            emp = Employee.all()[self.selected]
+            emp = Employee.all()[self.selected_index]
             if emp.marker:
                 self.map_service.remove_marker(emp.marker)
             emp.update(first, last, city, wash)
 
-        lat, lon = get_coordinates(city)
-        emp.marker = self.map_service.add_marker(lat, lon, label=emp.full_name())
+        emp.marker = self.map_service.add_marker(*emp.coordinates,
+                                                 label=emp.full_name())
 
         self.refresh()
-        if self.overview_tab: self.overview_tab.refresh()
+        self.overview_tab.refresh()
         self._clear()
 
-    def _pick(self, _):
-        sel = self.lb.curselection()
-        if not sel: return
-        self.selected = sel[0]; e = Employee.all()[self.selected]
-        self.e_first.delete(0, tk.END); self.e_first.insert(0, e.first_name)
-        self.e_last.delete(0, tk.END);  self.e_last.insert(0, e.last_name)
-        self.e_city.delete(0, tk.END);  self.e_city.insert(0, e.city)
-        self.cb_wash.set(e.assigned_car_wash)
-        self.btn_save.config(text="Zapisz")
+    # wczytanie danych do edycji
+    def _on_select(self, _event):
+        selected = self.listbox.curselection()
+        if not selected:
+            return
+        self.selected_index = selected[0]
+        emp = Employee.all()[self.selected_index]
 
+        self.entry_first.delete(0, tk.END); self.entry_first.insert(0, emp.first_name)
+        self.entry_last.delete(0, tk.END);  self.entry_last.insert(0, emp.last_name)
+        self.entry_city.delete(0, tk.END);  self.entry_city.insert(0, emp.city)
+        self.combo_wash.set(emp.assigned_car_wash)
+
+        self.btn_add_save.config(text="Zapisz")
+
+    # usunięcie pracownika
     def _delete(self):
-        sel = self.lb.curselection()
-        if not sel: return
-        e = Employee.all().pop(sel[0])
-        if e.marker:
-            self.map_service.remove_marker(e.marker)
+        selected = self.listbox.curselection()
+        if not selected:
+            return
+        emp = Employee.all().pop(selected[0])
+        if emp.marker:
+            self.map_service.remove_marker(emp.marker)
+
         self.refresh()
-        if self.overview_tab: self.overview_tab.refresh()
+        self.overview_tab.refresh()
         self._clear()
 
+    # czyszczenie formularza
     def _clear(self):
-        for ent in (self.e_first, self.e_last, self.e_city):
-            ent.delete(0, tk.END)
-        self.cb_wash.set("")
-        self.btn_save.config(text="Dodaj")
-        self.selected = None
+        for entry in (self.entry_first, self.entry_last, self.entry_city):
+            entry.delete(0, tk.END)
+        self.combo_wash.set("")
+        self.btn_add_save.config(text="Dodaj")
+        self.selected_index = None
